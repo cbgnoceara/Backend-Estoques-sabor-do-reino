@@ -5,9 +5,6 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const axios = require('axios');
 
-// ⭐ ADICIONADO PARA DEPURAR AS VARIÁVEIS DE AMBIENTE ⭐
-
-
 // 2. Configurar o servidor
 const app = express();
 app.use(cors());
@@ -18,24 +15,34 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("Conectado ao MongoDB com sucesso!"))
   .catch((err) => console.error("Erro ao conectar ao MongoDB:", err));
 
-// 4. Definir o "molde" do produto (Schema)
+// 4. ⭐ NOVO "MOLDE" DO PRODUTO (SCHEMA) - Agora mais inteligente!
+const VariacaoSchema = new mongoose.Schema({
+  nome: { type: String, required: true },
+  pesoKg: { type: Number, required: true }
+});
+
 const ProdutoSchema = new mongoose.Schema({
   nome: { type: String, required: true },
-  quantidade: { type: Number, required: true, default: 0 }
+  quantidade: { type: Number, required: true, default: 0 },
+  unidadeDeMedida: {
+    type: String,
+    required: true,
+    enum: ['UN', 'KG'] // Só aceita 'UN' ou 'KG'
+  },
+  variacoes: [VariacaoSchema] // Um array de variações, opcional
 }, {
   collection: 'ProdutosNoEstoque' 
 });
 
 const Produto = mongoose.model('Produto', ProdutoSchema);
 
-// 5. Criar as Rotas (API)
+// 5. ROTAS DA API (ATUALIZADAS PARA A NOVA LÓGICA)
 
-// ROTA DE PING PARA MANTER O SERVIDOR ATIVO
 app.get('/ping', (req, res) => {
     res.status(200).json({ message: "Ping recebido com sucesso. Servidor está ativo." });
 });
 
-// ROTA PARA BUSCAR TODOS OS PRODUTOS (GET)
+// GET /produtos - Não precisa de alteração
 app.get('/produtos', async (req, res) => {
   try {
     const produtos = await Produto.find().sort({ nome: 1 });
@@ -45,13 +52,11 @@ app.get('/produtos', async (req, res) => {
   }
 });
 
-// ROTA PARA ADICIONAR UM NOVO PRODUTO (POST)
+// POST /produtos - Atualizado para receber os novos campos
 app.post('/produtos', async (req, res) => {
   try {
-    const novoProduto = new Produto({
-      nome: req.body.nome,
-      quantidade: req.body.quantidade
-    });
+    const { nome, quantidade, unidadeDeMedida, variacoes } = req.body;
+    const novoProduto = new Produto({ nome, quantidade, unidadeDeMedida, variacoes });
     await novoProduto.save();
     res.status(201).json(novoProduto);
   } catch (error) {
@@ -59,30 +64,50 @@ app.post('/produtos', async (req, res) => {
   }
 });
 
-// ROTA PARA ATUALIZAR A QUANTIDADE (+1 ou -1) (PATCH)
+// ⭐ PATCH /produtos/:id - Rota de atualização de estoque totalmente refeita
 app.patch('/produtos/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { incremento } = req.body;
-    const produtoAtualizado = await Produto.findByIdAndUpdate(
-      id,
-      { $inc: { quantidade: incremento } },
-      { new: true }
-    );
+    const { tipo, valor } = req.body;
+    let atualizacao;
+
+    switch (tipo) {
+      case 'UN': // Venda por unidade
+        atualizacao = { $inc: { quantidade: valor } }; // valor será -1 ou +1
+        break;
+      case 'KG': // Venda a granel
+        atualizacao = { $inc: { quantidade: valor } }; // valor será o peso, ex: -0.250
+        break;
+      case 'VARIACAO': // Venda de uma variação (ex: pote de açaí)
+        const produto = await Produto.findById(id);
+        if (!produto) return res.status(404).json({ message: "Produto não encontrado." });
+        
+        const variacao = produto.variacoes.find(v => v.nome === valor.nome);
+        if (!variacao) return res.status(404).json({ message: "Variação não encontrada." });
+
+        const pesoTotalVendido = variacao.pesoKg * valor.quantidade;
+        atualizacao = { $inc: { quantidade: -pesoTotalVendido } };
+        break;
+      default:
+        return res.status(400).json({ message: "Tipo de atualização inválido." });
+    }
+
+    const produtoAtualizado = await Produto.findByIdAndUpdate(id, atualizacao, { new: true });
     res.json(produtoAtualizado);
+
   } catch (error) {
     res.status(500).json({ message: "Erro ao atualizar produto." });
   }
 });
 
-// ROTA PARA EDITAR UM PRODUTO (NOME E QUANTIDADE) (PUT)
+// PUT /produtos/:id - Atualizado para editar todos os campos
 app.put('/produtos/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { nome, quantidade } = req.body;
+        const { nome, quantidade, unidadeDeMedida, variacoes } = req.body;
         const produtoEditado = await Produto.findByIdAndUpdate(
             id,
-            { nome, quantidade },
+            { nome, quantidade, unidadeDeMedida, variacoes },
             { new: true }
         );
         res.json(produtoEditado);
@@ -91,7 +116,7 @@ app.put('/produtos/:id', async (req, res) => {
     }
 });
 
-// ROTA PARA EXCLUIR UM PRODUTO (DELETE)
+// DELETE /produtos/:id - Não precisa de alteração
 app.delete('/produtos/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -108,20 +133,15 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 
-  // LÓGICA DE AUTO-PING A CADA 5 MINUTOS
+  // Lógica de auto-ping (sem alterações)
   const SELF_URL = process.env.SELF_URL;
   if (SELF_URL) {
     setInterval(() => {
       axios.get(`${SELF_URL}/ping`)
-        .then(() => {
-          console.log(`[AUTO-PING] Ping enviado para ${SELF_URL}/ping`);
-        })
-        .catch((err) => {
-          console.error(`[AUTO-PING] Erro ao enviar ping: ${err.message}`);
-        });
-    }, 5 * 60 * 1000); // 5 minutos
+        .then(() => console.log(`[AUTO-PING] Ping enviado para ${SELF_URL}/ping`))
+        .catch((err) => console.error(`[AUTO-PING] Erro ao enviar ping: ${err.message}`));
+    }, 5 * 60 * 1000);
   } else {
-    console.warn("[AUTO-PING] A variável SELF_URL não foi encontrada no ambiente. O auto-ping está desativado.");
+    console.warn("[AUTO-PING] A variável SELF_URL não está definida. O auto-ping está desativado.");
   }
 });
-
