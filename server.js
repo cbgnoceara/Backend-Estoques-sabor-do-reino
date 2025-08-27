@@ -6,7 +6,7 @@ const cors = require('cors');
 const axios = require('axios');
 
 // ⭐ ADICIONADO PARA DEPURAR AS VARIÁVEIS DE AMBIENTE ⭐
-console.log("Variáveis de Ambiente disponíveis no Render:", process.env);
+
 
 // 2. Configurar o servidor
 const app = express();
@@ -124,3 +124,4 @@ app.listen(PORT, () => {
     console.warn("[AUTO-PING] A variável SELF_URL não foi encontrada no ambiente. O auto-ping está desativado.");
   }
 });
+
