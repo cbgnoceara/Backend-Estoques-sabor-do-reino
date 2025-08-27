@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const axios = require('axios'); // ⭐ NOVA BIBLIOTECA
 
 // 2. Configurar o servidor
 const app = express();
@@ -25,6 +26,11 @@ const ProdutoSchema = new mongoose.Schema({
 const Produto = mongoose.model('Produto', ProdutoSchema);
 
 // 5. Criar as Rotas (API)
+
+// ⭐ NOVA ROTA DE PING PARA MANTER O SERVIDOR ATIVO
+app.get('/ping', (req, res) => {
+    res.status(200).json({ message: "Ping recebido com sucesso. Servidor está ativo." });
+});
 
 // ROTA PARA BUSCAR TODOS OS PRODUTOS (GET)
 app.get('/produtos', async (req, res) => {
@@ -66,16 +72,15 @@ app.patch('/produtos/:id', async (req, res) => {
   }
 });
 
-// ⭐ NOVA ROTA PARA EDITAR UM PRODUTO (NOME E QUANTIDADE) (PUT)
+// ROTA PARA EDITAR UM PRODUTO (NOME E QUANTIDADE) (PUT)
 app.put('/produtos/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { nome, quantidade } = req.body; // Pega o novo nome e quantidade do corpo da requisição
-
+        const { nome, quantidade } = req.body;
         const produtoEditado = await Produto.findByIdAndUpdate(
             id,
-            { nome, quantidade }, // Atualiza os campos
-            { new: true } // Retorna o documento já com a atualização
+            { nome, quantidade },
+            { new: true }
         );
         res.json(produtoEditado);
     } catch (error) {
@@ -83,7 +88,7 @@ app.put('/produtos/:id', async (req, res) => {
     }
 });
 
-// ⭐ NOVA ROTA PARA EXCLUIR UM PRODUTO (DELETE)
+// ROTA PARA EXCLUIR UM PRODUTO (DELETE)
 app.delete('/produtos/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -99,4 +104,21 @@ app.delete('/produtos/:id', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
+
+  // ⭐ LÓGICA DE AUTO-PING A CADA 5 MINUTOS
+  // Garante que o servidor não "durma" em plataformas de hospedagem gratuitas
+  const SELF_URL = process.env.SELF_URL; // Pega a URL do arquivo .env
+  if (SELF_URL) {
+    setInterval(() => {
+      axios.get(`${SELF_URL}/ping`)
+        .then(() => {
+          console.log(`[AUTO-PING] Ping enviado para ${SELF_URL}/ping`);
+        })
+        .catch((err) => {
+          console.error(`[AUTO-PING] Erro ao enviar ping: ${err.message}`);
+        });
+    }, 5 * 60 * 1000); // 5 minutos
+  } else {
+    console.warn("[AUTO-PING] A variável SELF_URL não está definida no arquivo .env. O auto-ping está desativado.");
+  }
 });
