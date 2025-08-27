@@ -3,7 +3,10 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const axios = require('axios'); // ⭐ NOVA BIBLIOTECA
+const axios = require('axios');
+
+// ⭐ ADICIONADO PARA DEPURAR AS VARIÁVEIS DE AMBIENTE ⭐
+console.log("Variáveis de Ambiente disponíveis no Render:", process.env);
 
 // 2. Configurar o servidor
 const app = express();
@@ -27,7 +30,7 @@ const Produto = mongoose.model('Produto', ProdutoSchema);
 
 // 5. Criar as Rotas (API)
 
-// ⭐ NOVA ROTA DE PING PARA MANTER O SERVIDOR ATIVO
+// ROTA DE PING PARA MANTER O SERVIDOR ATIVO
 app.get('/ping', (req, res) => {
     res.status(200).json({ message: "Ping recebido com sucesso. Servidor está ativo." });
 });
@@ -105,9 +108,8 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 
-  // ⭐ LÓGICA DE AUTO-PING A CADA 5 MINUTOS
-  // Garante que o servidor não "durma" em plataformas de hospedagem gratuitas
-  const SELF_URL = process.env.SELF_URL; // Pega a URL do arquivo .env
+  // LÓGICA DE AUTO-PING A CADA 5 MINUTOS
+  const SELF_URL = process.env.SELF_URL;
   if (SELF_URL) {
     setInterval(() => {
       axios.get(`${SELF_URL}/ping`)
@@ -119,6 +121,6 @@ app.listen(PORT, () => {
         });
     }, 5 * 60 * 1000); // 5 minutos
   } else {
-    console.warn("[AUTO-PING] A variável SELF_URL não está definida no arquivo .env. O auto-ping está desativado.");
+    console.warn("[AUTO-PING] A variável SELF_URL não foi encontrada no ambiente. O auto-ping está desativado.");
   }
 });
